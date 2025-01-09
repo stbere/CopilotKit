@@ -1,10 +1,18 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { InputProps } from "./props";
 import { useChatContext } from "./ChatContext";
 import AutoResizingTextarea from "./Textarea";
+import { usePushToTalk } from "../../hooks/use-push-to-talk";
+import { useCopilotContext } from "@copilotkit/react-core";
 
-export const Input = ({ inProgress, onSend, children }: InputProps) => {
+export const Input = ({ inProgress, onSend, isVisible = false }: InputProps) => {
   const context = useChatContext();
+  const copilotContext = useCopilotContext();
+
+  const pushToTalkConfigured =
+    copilotContext.copilotApiConfig.textToSpeechUrl !== undefined &&
+    copilotContext.copilotApiConfig.transcribeAudioUrl !== undefined;
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleDivClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -23,15 +31,34 @@ export const Input = ({ inProgress, onSend, children }: InputProps) => {
     textareaRef.current?.focus();
   };
 
-  const icon = inProgress ? context.icons.activityIcon : context.icons.sendIcon;
-  const disabled = inProgress || text.length === 0;
+  useEffect(() => {
+    if (isVisible) {
+      textareaRef.current?.focus();
+    }
+  }, [isVisible]);
+
+  const { pushToTalkState, setPushToTalkState } = usePushToTalk({
+    sendFunction: onSend,
+    inProgress,
+  });
+
+  const sendIcon =
+    inProgress || pushToTalkState === "transcribing"
+      ? context.icons.activityIcon
+      : context.icons.sendIcon;
+  const showPushToTalk =
+    pushToTalkConfigured &&
+    (pushToTalkState === "idle" || pushToTalkState === "recording") &&
+    !inProgress;
+
+  const canSend = () => {
+    return !inProgress && text.trim().length > 0 && pushToTalkState === "idle";
+  };
+
+  const sendDisabled = !canSend();
 
   return (
     <div className="copilotKitInput" onClick={handleDivClick}>
-      <span>{children}</span>
-      <button className="copilotKitSendButton" disabled={disabled} onClick={send}>
-        {icon}
-      </button>
       <AutoResizingTextarea
         ref={textareaRef}
         placeholder={context.labels.placeholder}
@@ -42,10 +69,32 @@ export const Input = ({ inProgress, onSend, children }: InputProps) => {
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
-            send();
+            if (canSend()) {
+              send();
+            }
           }
         }}
       />
+      <div className="copilotKitInputControls">
+        {showPushToTalk && (
+          <button
+            onClick={() =>
+              setPushToTalkState(pushToTalkState === "idle" ? "recording" : "transcribing")
+            }
+            className={pushToTalkState === "recording" ? "copilotKitPushToTalkRecording" : ""}
+          >
+            {context.icons.pushToTalkIcon}
+          </button>
+        )}
+        <button
+          disabled={sendDisabled}
+          onClick={send}
+          data-copilotkit-in-progress={!!inProgress}
+          data-testid={inProgress ? "copilot-chat-request-in-progress" : undefined}
+        >
+          {sendIcon}
+        </button>
+      </div>
     </div>
   );
 };

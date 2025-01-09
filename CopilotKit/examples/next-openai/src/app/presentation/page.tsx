@@ -1,157 +1,60 @@
 "use client";
 
-import { useCopilotContext } from "@copilotkit/react-core";
-import { CopilotTask } from "@copilotkit/react-core";
-import {
-  CopilotKit,
-  useMakeCopilotActionable,
-  useMakeCopilotReadable,
-} from "@copilotkit/react-core";
-import { CopilotSidebar } from "@copilotkit/react-ui";
-import { useEffect, useState } from "react";
-import Markdown from "react-markdown";
+import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
 import "./styles.css";
+import { Presentation } from "./components/main/Presentation";
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-let globalAudio: any = undefined;
-let globalAudioEnabled = false;
+export default function AIPresentation() {
+  const [performResearch, setPerformResearch] = useState(false);
+  const searchParams = useSearchParams();
+  const serviceAdapter = searchParams.get("serviceAdapter") || "openai";
 
-const Demo = () => {
+  const runtimeUrl =
+    searchParams.get("runtimeUrl") || `/api/copilotkit?serviceAdapter=${serviceAdapter}`;
+  const publicApiKey = searchParams.get("publicApiKey");
+
+  const copilotKitProps: Partial<React.ComponentProps<typeof CopilotKit>> = {
+    transcribeAudioUrl: "/api/transcribe",
+    textToSpeechUrl: "/api/tts",
+    runtimeUrl,
+    publicApiKey: publicApiKey || undefined,
+  };
+
   return (
-    <CopilotKit url="/api/copilotkit/openai">
-      <CopilotSidebar
-        defaultOpen={true}
-        labels={{
-          title: "Presentation Copilot",
-          initial: "Hi you! 👋 I can give you a presentation on any topic.",
-        }}
-        clickOutsideToClose={false}
-        onSubmitMessage={async (message) => {
-          if (!globalAudioEnabled) {
-            globalAudio.play();
-            globalAudio.pause();
-          }
-          globalAudioEnabled = true;
-        }}
+    <CopilotKit {...copilotKitProps}>
+      <div
+        style={
+          {
+            height: `100vh`,
+            "--copilot-kit-primary-color": "#222222",
+          } as CopilotKitCSSProperties
+        }
       >
-        <Presentation />
-      </CopilotSidebar>
+        <CopilotSidebar
+          instructions={
+            "Help the user create and edit a powerpoint-style presentation." +
+            (!performResearch
+              ? " No research is needed. Do not perform any research."
+              : " Perform research on the topic.")
+          }
+          defaultOpen={true}
+          labels={{
+            title: "Presentation Copilot",
+            initial: "Hi you! 👋 I can help you create a presentation on any topic.",
+          }}
+          clickOutsideToClose={false}
+        >
+          <div className="relative">
+            <Presentation
+              performResearch={performResearch}
+              setPerformResearch={setPerformResearch}
+            />
+          </div>
+        </CopilotSidebar>
+      </div>
     </CopilotKit>
   );
-};
-
-const Presentation = () => {
-  const [state, setState] = useState({
-    markdown: `# Hello World!`,
-    backgroundImage: "hello",
-  });
-
-  useEffect(() => {
-    if (!globalAudio) {
-      globalAudio = new Audio();
-    }
-  }, []);
-
-  useMakeCopilotReadable("This is the current slide: " + JSON.stringify(state));
-
-  useMakeCopilotActionable(
-    {
-      name: "presentSlide",
-      description:
-        "Present a slide in the presentation you are giving. Call this function multiple times to present multiple slides.",
-      argumentAnnotations: [
-        {
-          name: "markdown",
-          type: "string",
-          description:
-            "The text to display in the presentation slide. Use simple markdown to outline your speech, like a headline, lists, paragraphs, etc.",
-          required: true,
-        },
-        {
-          name: "backgroundImage",
-          type: "string",
-          description: "What to display in the background of the slide (i.e. 'dog' or 'house').",
-          required: true,
-        },
-        {
-          name: "speech",
-          type: "string",
-          description: "An informative speech about the current slide.",
-          required: true,
-        },
-      ],
-
-      implementation: async (markdown, backgroundImage, speech) => {
-        setState({
-          markdown,
-          backgroundImage,
-        });
-
-        console.log("Presenting slide: ", markdown, backgroundImage, speech);
-
-        const encodedText = encodeURIComponent(speech);
-        const url = `/api/tts?text=${encodedText}`;
-        globalAudio.src = url;
-        await globalAudio.play();
-        await new Promise<void>((resolve) => {
-          globalAudio.onended = function () {
-            resolve();
-          };
-        });
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      },
-    },
-    [],
-  );
-
-  const randomSlideTask = new CopilotTask({
-    instructions: "Make a random slide related to the current topic",
-  });
-
-  const context = useCopilotContext();
-
-  const [randomSlideTaskRunning, setRandomSlideTaskRunning] = useState(false);
-
-  return (
-    <div className="relative">
-      <Slide {...state} />
-      <button
-        disabled={randomSlideTaskRunning}
-        className={`absolute bottom-0 left-0 mb-4 ml-4 bg-blue-500 text-white font-bold py-2 px-4 rounded
-        ${randomSlideTaskRunning ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"}`}
-        onClick={async () => {
-          try {
-            setRandomSlideTaskRunning(true);
-            await randomSlideTask.run(context);
-          } finally {
-            setRandomSlideTaskRunning(false);
-          }
-        }}
-      >
-        {randomSlideTaskRunning ? "Generating slide..." : "Make random slide"}
-      </button>
-    </div>
-  );
-};
-
-type SlideProps = {
-  markdown: string;
-  backgroundImage: string;
-};
-
-const Slide = ({ markdown, backgroundImage }: SlideProps) => {
-  backgroundImage =
-    'url("https://source.unsplash.com/featured/?' + encodeURIComponent(backgroundImage) + '")';
-  return (
-    <div
-      className="h-screen w-full flex flex-col justify-center items-center text-5xl text-white bg-cover bg-center bg-no-repeat p-10 text-center"
-      style={{
-        backgroundImage,
-        textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000",
-      }}
-    >
-      <Markdown className="markdown">{markdown}</Markdown>
-    </div>
-  );
-};
-
-export default Demo;
+}

@@ -2,7 +2,11 @@ export { useCopilotChat } from "./use-copilot-chat";
 export type { UseCopilotChatOptions } from "./use-copilot-chat";
 export type { UseCopilotChatReturn } from "./use-copilot-chat";
 
-export { useMakeCopilotActionable } from "./use-make-copilot-actionable";
-export { useMakeCopilotReadable } from "./use-make-copilot-readable";
+export { useCopilotAction } from "./use-copilot-action";
+export { useCoAgentStateRender } from "./use-coagent-state-render";
 export { useMakeCopilotDocumentReadable } from "./use-make-copilot-document-readable";
 export { type UseChatHelpers } from "./use-chat";
+export { useCopilotReadable } from "./use-copilot-readable";
+export { useCoAgent, type HintFunction, runAgent, startAgent, stopAgent } from "./use-coagent";
+export { useCopilotRuntimeClient } from "./use-copilot-runtime-client";
+export { useCopilotAuthenticatedAction } from "./use-copilot-authenticated-action";

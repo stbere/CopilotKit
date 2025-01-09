@@ -1,11 +1,17 @@
-import React, { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MessagesProps } from "./props";
 import { useChatContext } from "./ChatContext";
-import { nanoid } from "nanoid";
-import { Message } from "@copilotkit/shared";
-import { Markdown } from "./Markdown";
+import { Message, ResultMessage, TextMessage, Role } from "@copilotkit/runtime-client-gql";
 
-export const Messages = ({ messages, inProgress }: MessagesProps) => {
+export const Messages = ({
+  messages,
+  inProgress,
+  children,
+  RenderTextMessage,
+  RenderActionExecutionMessage,
+  RenderAgentStateMessage,
+  RenderResultMessage,
+}: MessagesProps) => {
   const context = useChatContext();
   const initialMessages = useMemo(
     () => makeInitialMessages(context.labels.initial),
@@ -13,84 +19,72 @@ export const Messages = ({ messages, inProgress }: MessagesProps) => {
   );
   messages = [...initialMessages, ...messages];
 
-  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const actionResults: Record<string, string> = {};
 
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({
-        behavior: "auto",
-      });
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].isActionExecutionMessage()) {
+      const id = messages[i].id;
+      const resultMessage: ResultMessage | undefined = messages.find(
+        (message) => message.isResultMessage() && message.actionExecutionId === id,
+      ) as ResultMessage | undefined;
+
+      if (resultMessage) {
+        actionResults[id] = ResultMessage.decodeResult(resultMessage.result || "");
+      }
     }
-  };
+  }
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const { messagesEndRef, messagesContainerRef } = useScrollToBottom(messages);
 
   return (
-    <div className="copilotKitMessages">
+    <div className="copilotKitMessages" ref={messagesContainerRef}>
       {messages.map((message, index) => {
         const isCurrentMessage = index === messages.length - 1;
 
-        if (message.role === "user") {
+        if (message.isTextMessage()) {
           return (
-            <div key={index} className="copilotKitMessage copilotKitUserMessage">
-              {message.content}
-            </div>
+            <RenderTextMessage
+              key={index}
+              message={message}
+              inProgress={inProgress}
+              index={index}
+              isCurrentMessage={isCurrentMessage}
+            />
           );
-        } else if (message.role == "assistant") {
-          if (isCurrentMessage && inProgress && !message.content) {
-            return (
-              <div key={index} className={`copilotKitMessage copilotKitAssistantMessage`}>
-                {context.icons.spinnerIcon}
-              </div>
-            );
-          } else if (
-            (!inProgress || index != messages.length - 1) &&
-            !message.content &&
-            message.function_call
-          ) {
-            return (
-              <div key={index} className={`copilotKitMessage copilotKitAssistantMessage`}>
-                {context.labels.done}
-              </div>
-            );
-          }
-          // TODO: Add back partial message
-          // This shows up when the assistant is executing a function
-          //
-          // else if (message.status === "partial") {
-          //   return (
-          //     <div key={index} className={`copilotKitMessage copilotKitAssistantMessage`}>
-          //       {context.labels.thinking} {context.icons.spinnerIcon}
-          //     </div>
-          //   );
-          // }
-          else {
-            return (
-              <div key={index} className={`copilotKitMessage copilotKitAssistantMessage`}>
-                <Markdown content={message.content} />
-              </div>
-            );
-          }
+        } else if (message.isActionExecutionMessage()) {
+          return (
+            <RenderActionExecutionMessage
+              key={index}
+              message={message}
+              inProgress={inProgress}
+              index={index}
+              isCurrentMessage={isCurrentMessage}
+              actionResult={actionResults[message.id]}
+            />
+          );
+        } else if (message.isAgentStateMessage()) {
+          return (
+            <RenderAgentStateMessage
+              key={index}
+              message={message}
+              inProgress={inProgress}
+              index={index}
+              isCurrentMessage={isCurrentMessage}
+            />
+          );
+        } else if (message.isResultMessage()) {
+          return (
+            <RenderResultMessage
+              key={index}
+              message={message}
+              inProgress={inProgress}
+              index={index}
+              isCurrentMessage={isCurrentMessage}
+            />
+          );
         }
-        // TODO: Add back function and error messages
-        //
-        // else if (message.role === "function" && message.status === "success") {
-        //   return (
-        //     <div key={index} className={`copilotKitMessage copilotKitAssistantMessage`}>
-        //       {context.labels.done}
-        //     </div>
-        //   );
-        // } else if (message.status === "error") {
-        //   return (
-        //     <div key={index} className={`copilotKitMessage copilotKitAssistantMessage`}>
-        //       {context.labels.error}
-        //     </div>
-        //   );
-        // }
       })}
-      <div ref={messagesEndRef} />
+      <footer ref={messagesEndRef}>{children}</footer>
     </div>
   );
 };
@@ -105,9 +99,80 @@ function makeInitialMessages(initial?: string | string[]): Message[] {
     }
   }
 
-  return initialArray.map((message) => ({
-    id: nanoid(),
-    role: "assistant",
-    content: message,
-  }));
+  return initialArray.map(
+    (message) =>
+      new TextMessage({
+        role: Role.Assistant,
+        content: message,
+      }),
+  );
+}
+export function useScrollToBottom(messages: any[]) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+  const isUserScrollUpRef = useRef(false);
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      isProgrammaticScrollRef.current = true;
+      messagesEndRef.current.scrollIntoView({
+        behavior: "auto",
+      });
+    }
+  };
+
+  const handleScroll = () => {
+    if (isProgrammaticScrollRef.current) {
+      isProgrammaticScrollRef.current = false;
+      return;
+    }
+
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      isUserScrollUpRef.current = scrollTop + clientHeight < scrollHeight;
+    }
+  };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.addEventListener("scroll", handleScroll);
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener("scroll", handleScroll);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const mutationObserver = new MutationObserver(() => {
+      if (!isUserScrollUpRef.current) {
+        scrollToBottom();
+      }
+    });
+
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      mutationObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    isUserScrollUpRef.current = false;
+    scrollToBottom();
+  }, [messages.filter((m) => m.isTextMessage() && m.role === Role.User).length]);
+
+  return { messagesEndRef, messagesContainerRef };
 }

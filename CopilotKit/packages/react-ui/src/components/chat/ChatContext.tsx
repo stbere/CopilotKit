@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import * as DefaultIcons from "./Icons";
 
 /**
@@ -52,6 +52,13 @@ export interface CopilotChatIcons {
    * @default <RegenerateIcon />
    */
   regenerateIcon?: React.ReactNode;
+
+  /**
+   * The icons to use for push to talk.
+   * @default <PushToTalkIcon />
+   */
+
+  pushToTalkIcon?: React.ReactNode;
 }
 
 /**
@@ -76,18 +83,6 @@ export interface CopilotChatLabels {
   placeholder?: string;
 
   /**
-   * The message to display while the chat GPT is "thinking".
-   * @default "Thinking..."
-   */
-  thinking?: string;
-
-  /**
-   * The message to display when the chat is done executing a function.
-   * @default "✅ Done"
-   */
-  done?: string;
-
-  /**
    * The message to display when an error occurs.
    * @default "❌ An error occurred. Please try again."
    */
@@ -109,6 +104,8 @@ export interface CopilotChatLabels {
 interface ChatContext {
   labels: Required<CopilotChatLabels>;
   icons: Required<CopilotChatIcons>;
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }
 
 export const ChatContext = React.createContext<ChatContext | undefined>(undefined);
@@ -130,6 +127,8 @@ interface ChatContextProps {
   labels?: CopilotChatLabels;
   icons?: CopilotChatIcons;
   children?: React.ReactNode;
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }
 
 export const ChatContextProvider = ({
@@ -139,38 +138,51 @@ export const ChatContextProvider = ({
   labels,
   icons,
   children,
+  open,
+  setOpen,
 }: ChatContextProps) => {
+  const memoizedLabels = useMemo(
+    () => ({
+      ...{
+        initial: "",
+        title: "CopilotKit",
+        placeholder: "Type a message...",
+        error: "❌ An error occurred. Please try again.",
+        stopGenerating: "Stop generating",
+        regenerateResponse: "Regenerate response",
+      },
+      ...labels,
+    }),
+    [labels],
+  );
+
+  const memoizedIcons = useMemo(
+    () => ({
+      ...{
+        openIcon: DefaultIcons.OpenIcon,
+        closeIcon: DefaultIcons.CloseIcon,
+        headerCloseIcon: DefaultIcons.HeaderCloseIcon,
+        sendIcon: DefaultIcons.SendIcon,
+        activityIcon: DefaultIcons.ActivityIcon,
+        spinnerIcon: DefaultIcons.SpinnerIcon,
+        stopIcon: DefaultIcons.StopIcon,
+        regenerateIcon: DefaultIcons.RegenerateIcon,
+        pushToTalkIcon: DefaultIcons.PushToTalkIcon,
+      },
+      ...icons,
+    }),
+    [icons],
+  );
+
   const context = useMemo(
     () => ({
-      labels: {
-        ...{
-          initial: "",
-          title: "CopilotKit",
-          placeholder: "Type a message...",
-          thinking: "Thinking...",
-          done: "✅ Done",
-          error: "❌ An error occurred. Please try again.",
-          stopGenerating: "Stop generating",
-          regenerateResponse: "Regenerate response",
-        },
-        ...labels,
-      },
-
-      icons: {
-        ...{
-          openIcon: DefaultIcons.OpenIcon,
-          closeIcon: DefaultIcons.CloseIcon,
-          headerCloseIcon: DefaultIcons.HeaderCloseIcon,
-          sendIcon: DefaultIcons.SendIcon,
-          activityIcon: DefaultIcons.ActivityIcon,
-          spinnerIcon: DefaultIcons.SpinnerIcon,
-          stopIcon: DefaultIcons.StopIcon,
-          regenerateIcon: DefaultIcons.RegenerateIcon,
-        },
-        icons,
-      },
+      labels: memoizedLabels,
+      icons: memoizedIcons,
+      open,
+      setOpen,
     }),
-    [labels, icons],
+    [memoizedLabels, memoizedIcons, open, setOpen],
   );
+
   return <ChatContext.Provider value={context}>{children}</ChatContext.Provider>;
 };

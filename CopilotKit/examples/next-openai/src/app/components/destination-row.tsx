@@ -2,7 +2,8 @@
 
 import React from "react";
 import { Destination } from "./vacation-list";
-import { useMakeCopilotReadable } from "@copilotkit/react-core";
+import { useCopilotReadable } from "@copilotkit/react-core";
+import Image from "next/image";
 
 export type DestinationRowProps = {
   destination: Destination;
@@ -17,16 +18,17 @@ export function DestinationRow({
   onCheckChange,
   parentCopilotPointer,
 }: DestinationRowProps) {
-  useMakeCopilotReadable(
-    JSON.stringify({
+  useCopilotReadable({
+    description: "A row in the destination list",
+    value: {
       name: destination.name,
       country: destination.country,
       description: destination.description,
       activities: destination.activities,
       isSelected: isChecked,
-    }),
-    parentCopilotPointer,
-  );
+    },
+    parentId: parentCopilotPointer,
+  });
 
   return (
     <tr key={destination.name}>
@@ -45,6 +47,7 @@ export function DestinationRow({
         <div className="w-full flex items-stretch">
           <div className="flex items-center justify-center w-full">
             <input
+              data-test-id={`checkbox-${destination.name.toLowerCase().replace(/\s+/g, "-")}-${isChecked ? "checked" : "unchecked"}`}
               type="checkbox"
               checked={isChecked}
               onChange={(event) => onCheckChange(event.target.checked)}
